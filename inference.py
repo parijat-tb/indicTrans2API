@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from IndicTransToolkit.processor import IndicProcessor
+from languages import get_language_code, print_supported_languages
 
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -39,14 +40,27 @@ class IndicTrans2Translator:
         self.ip = IndicProcessor(inference=True)
         self.model.eval()
 
-    def translate(self, input_sentences, src_lang, tgt_lang):
+    def translate(self, input_sentences, src_lang, tgt_lang, max_length=512, num_beams=5, num_return_sequences=1):
+        src_code = get_language_code(src_lang)
+        tgt_code = get_language_code(tgt_lang)
+
+        if not src_code:
+            print(f"Error: Unsupported source language '{src_lang}'")
+            print_supported_languages()
+            return None
+        
+        if not tgt_code:
+            print(f"Error: Unsupported target language '{tgt_lang}'")
+            print_supported_languages()
+            return None
+
         if isinstance(input_sentences, str):
             input_sentences = [input_sentences]
 
         batch = self.ip.preprocess_batch(
             input_sentences,
-            src_lang=src_lang,
-            tgt_lang=tgt_lang,
+            src_lang=src_code,
+            tgt_lang=tgt_code,
         )
 
         inputs = self.tokenizer(
@@ -60,11 +74,11 @@ class IndicTrans2Translator:
         with torch.no_grad():
             generated_tokens = self.model.generate(
                 **inputs,
-                use_cache=True,
+                use_cache=False,
                 min_length=0,
-                max_length=256,
-                num_beams=5,
-                num_return_sequences=1,
+                max_length=max_length,
+                num_beams=num_beams,
+                num_return_sequences=num_return_sequences,
             )
 
         generated_tokens = self.tokenizer.batch_decode(
@@ -73,18 +87,19 @@ class IndicTrans2Translator:
             clean_up_tokenization_spaces=True,
         )
 
-        translations = self.ip.postprocess_batch(generated_tokens, lang=tgt_lang)
+        translations = self.ip.postprocess_batch(generated_tokens, lang=tgt_code)
         return translations
 
 # Example usage if run as script
 if __name__ == "__main__":
     translator = IndicTrans2Translator()
-    src_lang, tgt_lang = "eng_Latn", "hin_Deva"
+    src_lang, tgt_lang = "English", "Hindi"
     input_sentences = [
         "When I was young, I used to go to the park every day.",
         "We watched a new movie last week, which was very inspiring.",
     ]
     translations = translator.translate(input_sentences, src_lang, tgt_lang)
-    for input_sentence, translation in zip(input_sentences, translations):
-        print(f"{src_lang}: {input_sentence}")
-        print(f"{tgt_lang}: {translation}")
+    if translations:
+        for input_sentence, translation in zip(input_sentences, translations):
+            print(f"{src_lang}: {input_sentence}")
+            print(f"{tgt_lang}: {translation}")
