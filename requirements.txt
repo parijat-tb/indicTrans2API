@@ -1,0 +1,7 @@
+torch
+transformers
+IndicTransToolkit
+scipy
+sentencepiece
+python-dotenv
+huggingface_hub[hf_xet]
